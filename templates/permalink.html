@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block main %}
+	<div class="posts edit-menu">
+		<div class="likes">
+			<h3>Likes: {{ likes }}</h3> 
+		</div>
+		<form method="post" class="edit-item">
+			<button type="submit" value="like" name="edit">Like</button>
+			<button type="submit" value="edit" name="edit">Edit</button>
+			<button type="submit" name="edit" value="delete">
+			Delete
+			</button>
+			<br>
+			<div class="error">
+				{{ error }}
+			</div>
+		</form>
+	</div>
+	{{ render.render_post(post) | safe}}
+{% endblock %}

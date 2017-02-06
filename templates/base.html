@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+
+<html>
+	<head>
+		{% block head %}
+		<title>My Blog</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta charset="utf-8">
+		<link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400" rel="stylesheet">
+		<link rel="stylesheet" type="text/css" href="/css/blog.css">
+		{% endblock %}
+	</head>
+	<body>
+		{% block header %}
+		<header>
+			<div class="header-content">		
+				<h1 class="header-title">MyBlog</h1>
+			</div>
+			<hr>
+		</header>
+		{% endblock %}
+		
+		<nav>
+			<ul class="my-nav">
+				{% block nav %}
+				{{ nav.render_nav() | safe }}
+				{% endblock %}
+			</ul>
+		</nav>
+		<hr>
+		<main>
+			<div class="content">
+			{% block main %}
+			{% endblock %}
+			</div>
+		</main>
+		<footer>
+			<div class="footer-content">
+				{% block footer %} Made by Otavio Ho {% endblock %}
+			</div>
+		</footer>
+	</body>
