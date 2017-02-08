@@ -35,7 +35,7 @@ SECRET = 'NSLlYWrouJa40kFPavLS'
 from models import Post
 from models import Users
 from models import Likes
-#from models import Comments
+from models import Comments
 
 
 def make_valid_cookie(user_id):
@@ -67,9 +67,13 @@ def render_str(template, **params):
 
 class RenderPost:
 	def render_post(self, post):
-		name = Users.get_by_id(int(post.user_id)).username
+		name = post.user.username
 		pid = post.post_id()
-		return render_str("post.html", post = post, name = name, pid = pid)
+		return render_str("post.html", post = post, pid = pid)
+
+class RenderComment:
+	def render_comment(self, comment):
+		return render_str("comment.html", comment = comment)
 
 class Nav:
 	def __init__(self, link3, link4, nav3, nav4):
@@ -95,8 +99,9 @@ class Handler(webapp2.RequestHandler):
 		val = self.request.cookies.get(name)
 		if val:
 			uid = is_valid_cookie(val)
-			key = db.Key.from_path('Users', int(uid))
-			user = db.get(key)
+			if uid:
+				key = db.Key.from_path('Users', int(uid))
+				user = db.get(key)
 			if uid and user:
 				return uid
 
@@ -135,9 +140,10 @@ class Form(Handler):
 		title = self.request.get("title")
 		content = self.request.get("content")
 		uid = int(self.read_cookie('login'))
+		user = Users.get_by_id(uid)
 
 		if title and content:
-			post = Post(title = title, content = content, user_id = uid)
+			post = Post(title = title, content = content, user = user)
 			post.put()
 			post_id = "/blog/"+str(post.key().id())
 			self.redirect(post_id)
@@ -163,56 +169,50 @@ class Teste(Handler):
 	
 class PostPage(Handler):
 	def get(self, post_id):
+		errors = {"del_permission":"You can only delete your own Post",
+				  "edit_permission":"You can only edit yout own Post",
+				  "like_permission": "You must be logged in",
+				  "like_alrd": "You already liked this post",
+				  "like_own": "You cant like your own post" }
+		render = RenderPost()
+		renderComment = RenderComment()
+		error = ""
 		key = db.Key.from_path('Post', int(post_id))
 		post = db.get(key)
-		likes = str(db.GqlQuery("select * from Likes where post_id = "+ str(post.key().id())).count())
-		render = RenderPost()
+		e = self.request.get("e")
+		if e:
+			error = errors[e]
+
+		comments = post.comments.order("-date")
 		if not post:
 			self.write("ERROR 404")
 		else:
-			self.render("permalink.html", post = post, error = "", likes = likes, render = render)
+			likes = post.likes.count()
+			self.render("permalink.html", post = post, error = error, likes = likes, render = render, comment_error = "", renderComment = renderComment, comments = comments)
 
 	def post(self, post_id):
-		key = db.Key.from_path('Post', int(post_id))
-		post = db.get(key)
-		uid = self.read_cookie('login')
-		edit = self.request.get("edit")
-		likes = str(db.GqlQuery("select * from Likes where post_id = "+ str(post.key().id())).count())
+		renderComment = RenderComment()
 		render = RenderPost()
-
+		login = self.read_cookie('login')
+		uid = None
+		if login:
+			uid = int(login)
+			user = Users.get_by_id(uid)
+		content = self.request.get("content")
+		post = Post.get_by_id(int(post_id))
+		likes = post.likes.count()
+		comments = post.comments.order("-date")
 		if uid:
-			if int(uid) == int(post.user_id):
-				if edit == "edit":
-					self.redirect(str("/blog/edit/"+post_id))
-				if edit == "delete":
-					post.delete()
-					self.redirect("/blog/deleted")
-				if edit == "like":
-					error = "You can't like your own post"
-					self.render("permalink.html", post = post, error = error, likes = likes, render = render)
+			if content:
+				comment = Comments(post = post, user = user, content = content)
+				comment.put()
+				self.redirect("/blog/"+post_id)
 			else:
-				if edit == "edit":
-					error = "You can only edit yout own Post"
-					self.render("permalink.html", post = post, error = error, likes = likes, render = render)
-				if edit == "delete":
-					error = "You can only delete your own Post"
-					self.render("permalink.html", post = post, error = error, likes = likes, render = render)
-				if edit == "like":
-					query = str("select * from Likes where post_id = " + post.post_id() + " and user_id = " + str(uid))
-					exist_likes = db.GqlQuery(query).count()
-					error = ""
-					if exist_likes == 0:
-						like = Likes(user_id = int(uid), post_id = int(post.key().id()))
-						like.put()
-						likess = str(db.GqlQuery("select * from Likes where post_id = "+ str(post.key().id())).count())
-						self.redirect("/blog/" + post.post_id())
-					else:
-						error = "You already liked that post"
-						self.render("permalink.html", post = post, error = error, likes = likes, render = render)
+				self.render("permalink.html", post = post, error = "", likes = likes, render = render, comment_error = "Type something!", renderComment = renderComment, comments = comments)
 		else:
-			error = "You must be Logged in"
-			self.render("permalink.html", post = post, error = error, likes = likes)
-			
+			self.render("permalink.html", post = post, error = "", likes = likes, render = render, comment_error = "you must be logged in", renderComment = renderComment, comments = comments)
+
+	
 class LoginPage(Handler):
 	def get(self):
 		uid = self.read_cookie('login')
@@ -296,29 +296,46 @@ class Logout(Handler):
 class MyPosts(Handler):
 	def get(self):
 		uid = self.read_cookie('login')
-		query = str("select * from Post where user_id=" + uid + "order by date desc")
-		posts = db.GqlQuery(query)
+		user = Users.get_by_id(int(uid))
+		render = RenderPost()
+		posts = user.posts
 		p = posts.count()
 		if p == 0:
 			self.render("noposts.html")
 		else:
-			self.render("blog.html", posts = posts)
+			self.render("blog.html", posts = posts, render = render)
 
 class PostDeleted(Handler):
 	def get(self):
-		self.render("deleted.html")
+		login = self.read_cookie('login')
+		uid = None
+		if login:
+			uid = int(login) 
+		post_id = self.request.get("p")
+		if post_id:
+			post = Post.get_by_id(int(post_id))
+		else:
+			self.redirect("/blog")
+		if uid and int(uid) == int(post.user.key().id()):
+			post.delete()
+			self.render("deleted.html")
+		else:
+			self.redirect("/blog/" + post_id + "?e=del_permission")
 
 class EditPost(Handler):
 	def get(self, post_id):
-		uid = int(self.read_cookie('login'))
+		login = self.read_cookie('login')
+		uid = None
+		if login:
+			uid = int(login)
 		key = db.Key.from_path("Post", int(post_id))
 		post = db.get(key)
 		title = post.title
 		content = post.content
-		if int(uid) == int(post.user_id):
+		if uid and int(uid) == int(post.user.key().id()):
 			self.render("edit.html", title = title, content = content, error =  "")
 		else:
-			self.write("You can't edit a post that is not yours!")	
+			self.redirect("/blog/" + post_id + "?e=edit_permission")	
 
 	def post(self, post_id):
 		key = db.Key.from_path("Post", int(post_id))
@@ -336,6 +353,33 @@ class EditPost(Handler):
 			error = "Please insert both Title and Content"
 			self.render("edit.html", title=title,content=content, error=error)
 
+class LikePost(Handler):
+	def get(self):
+		login = self.read_cookie('login')
+		uid = None
+		if login:
+			uid = int(login)
+			user = Users.get_by_id(uid)
+		post_id = self.request.get("p")
+		if post_id:
+			if uid:
+				post = Post.get_by_id(int(post_id))
+				if int(uid) == int(post.user.key().id()):
+					#your own post
+					self.redirect("/blog/" + post_id + "?e=like_own")
+				else:
+					likes = db.GqlQuery("select * from Likes where user = :1 and post = :2", user.key(), post.key())
+					if likes.count() == 0:
+						new_like = Likes(post = post, user = user)
+						new_like.put()
+						self.redirect("/blog/" + str(post.key().id()))
+					else:
+						self.redirect("/blog/" + post_id + "?e=like_alrd")
+			else:
+				self.redirect("/blog/" + post_id + "?e=like_permission")
+		else:
+			self.redirect("/blog")
+
 app = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/blog/newpost', Form),
@@ -348,5 +392,6 @@ app = webapp2.WSGIApplication([
     ('/blog/logout', Logout),
     ('/blog/myposts', MyPosts),
     ('/blog/deleted', PostDeleted),
-    ('/blog/edit/([0-9]+)', EditPost)]
+    ('/blog/edit/([0-9]+)', EditPost),
+    ('/blog/like', LikePost)]
     , debug=True)

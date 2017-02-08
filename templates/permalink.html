@@ -5,17 +5,35 @@
 		<div class="likes">
 			<h3>Likes: {{ likes }}</h3> 
 		</div>
-		<form method="post" class="edit-item">
-			<button type="submit" value="like" name="edit">Like</button>
-			<button type="submit" value="edit" name="edit">Edit</button>
-			<button type="submit" name="edit" value="delete">
-			Delete
-			</button>
+		<div class="edit-item">
+			<a href="like?p={{ post.key().id() }}">Like</a>
+			<a href="edit/{{ post.key().id() }}">Edit</a>
+			<a href="deleted?p={{ post.key().id() }}">Delete</a>
 			<br>
 			<div class="error">
 				{{ error }}
 			</div>
-		</form>
+		</div>
 	</div>
 	{{ render.render_post(post) | safe}}
+
+	<div class="posts">
+		<h2>Comments</h2>
+		<br>
+		{% for c  in comments %}
+			{{ renderComment.render_comment(c) | safe}}
+		{% endfor %}
+		<br>
+		<br>
+		<div>
+			<form method="post">
+				<label>new comment: </label>
+				<textarea name="content"></textarea>
+				<div class="error">
+					{{ comment_error }}
+				</div>
+				<input type="submit">
+			</form>
+		</div>
+	</div>
 {% endblock %}
